@@ -1368,6 +1368,11 @@ func checkToken(ctx context.Context, token util.Token) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	// LookupSelfWithContext() calls ParseSecret(), which has several places
+	// that return no data and no error.
+	if resp == nil {
+		return false, fmt.Errorf("no response nor error for token query")
+	}
 	t, ok := resp.Data["type"]
 	if !ok {
 		return false, fmt.Errorf("could not assert token type")
