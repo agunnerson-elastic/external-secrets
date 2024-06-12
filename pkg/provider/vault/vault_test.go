@@ -2070,3 +2070,44 @@ func EquateErrors() cmp.Option {
 		return a.Error() == b.Error()
 	})
 }
+
+func TestCheckTokenErrors(t *testing.T) {
+	cases := map[string]struct {
+		message string
+		secret  *vault.Secret
+		err     error
+	}{
+		"SuccessWithNoData": {
+			message: "should not cache if token lookup returned no data",
+			secret:  &vault.Secret{},
+			err:     nil,
+		},
+		"Error": {
+			message: "should not cache if token lookup errored",
+			secret:  nil,
+			err:     errors.New(""),
+		},
+		// This happens when a token is expired and the Vault server returns:
+		// {"errors":["permission denied"]}
+		"NoDataNorError": {
+			message: "should not cache if token lookup returned no data nor error",
+			secret:  nil,
+			err:     nil,
+		},
+	}
+
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			token := fake.Token{
+				LookupSelfWithContextFn: func(ctx context.Context) (*vault.Secret, error) {
+					return tc.secret, tc.err
+				},
+			}
+
+			cached, _ := checkToken(context.Background(), token)
+			if cached {
+				t.Errorf("%v", tc.message)
+			}
+		})
+	}
+}
