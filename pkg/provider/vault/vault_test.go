@@ -2111,3 +2111,47 @@ func TestCheckTokenErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestCheckTokenTtl(t *testing.T) {
+	cases := map[string]struct {
+		message string
+		secret  *vault.Secret
+		cache   bool
+	}{
+		"LongTTL": {
+			message: "should cache if token expires far into the future",
+			secret: &vault.Secret{
+				Data: map[string]interface{}{
+					"ttl":  json.Number("3600"),
+					"type": "service",
+				},
+			},
+			cache: true,
+		},
+		"ShortTTL": {
+			message: "should not cache if token is about to expire",
+			secret: &vault.Secret{
+				Data: map[string]interface{}{
+					"ttl":  json.Number("5"),
+					"type": "service",
+				},
+			},
+			cache: false,
+		},
+	}
+
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			token := fake.Token{
+				LookupSelfWithContextFn: func(ctx context.Context) (*vault.Secret, error) {
+					return tc.secret, nil
+				},
+			}
+
+			cached, err := checkToken(context.Background(), token)
+			if cached != tc.cache || err != nil {
+				t.Errorf("%v: err = %v", tc.message, err)
+			}
+		})
+	}
+}

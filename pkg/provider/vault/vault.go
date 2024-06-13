@@ -1381,6 +1381,16 @@ func checkToken(ctx context.Context, token util.Token) (bool, error) {
 	if tokenType == "batch" {
 		return false, nil
 	}
+	ttl, ok := resp.Data["ttl"]
+	if !ok {
+		return false, fmt.Errorf("no TTL found in response")
+	}
+	ttl_int, err := ttl.(json.Number).Int64()
+	if err != nil {
+		return false, fmt.Errorf("invalid token TTL: %v: %v", ttl, err)
+	} else if ttl_int < 60 {
+		return false, nil
+	}
 	return true, nil
 }
 
