@@ -1381,6 +1381,14 @@ func checkToken(ctx context.Context, token util.Token) (bool, error) {
 	if tokenType == "batch" {
 		return false, nil
 	}
+	ttl, ok := resp.Data["ttl"]
+	if !ok {
+		return false, fmt.Errorf("no TTL found in response")
+	}
+	ttl_int := ttl.(int)
+	if ttl_int < 60 {
+		return false, fmt.Errorf("token expiring in %vs; treating as expired", ttl)
+	}
 	return true, nil
 }
 
