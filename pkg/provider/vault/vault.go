@@ -156,6 +156,7 @@ type client struct {
 }
 
 func NewVaultClient(c *vault.Config) (util.Client, error) {
+	logger.Info("NewVaultClient()")
 	cl, err := vault.NewClient(c)
 	if err != nil {
 		return nil, err
@@ -177,6 +178,7 @@ func NewVaultClient(c *vault.Config) (util.Client, error) {
 }
 
 func getVaultClient(c *Connector, store esv1beta1.GenericStore, cfg *vault.Config) (util.Client, error) {
+	logger.Info("getVaultClient")
 	isStaticToken := store.GetSpec().Provider.Vault.Auth.TokenSecretRef != nil
 	useCache := enableCache && !isStaticToken
 
@@ -198,6 +200,7 @@ func getVaultClient(c *Connector, store esv1beta1.GenericStore, cfg *vault.Confi
 	}
 
 	if useCache && !clientCache.Contains(key) {
+		logger.Info(fmt.Sprintf("No client cache for %v", key))
 		clientCache.Add(store.GetObjectMeta().ResourceVersion, key, client)
 	}
 	return client, nil
@@ -212,6 +215,7 @@ func (c *Connector) Capabilities() esv1beta1.SecretStoreCapabilities {
 	return esv1beta1.SecretStoreReadWrite
 }
 func (c *Connector) NewClient(ctx context.Context, store esv1beta1.GenericStore, kube kclient.Client, namespace string) (esv1beta1.SecretsClient, error) {
+	logger.Info(fmt.Sprintf("NewClient() for store %v and namespace %v", store, namespace))
 	// controller-runtime/client does not support TokenRequest or other subresource APIs
 	// so we need to construct our own client and use it to fetch tokens
 	// (for Kubernetes service account token auth)
@@ -228,6 +232,7 @@ func (c *Connector) NewClient(ctx context.Context, store esv1beta1.GenericStore,
 }
 
 func (c *Connector) newClient(ctx context.Context, store esv1beta1.GenericStore, kube kclient.Client, corev1 typedcorev1.CoreV1Interface, namespace string) (esv1beta1.SecretsClient, error) {
+	logger.Info(fmt.Sprintf("newClient() for store %v and namespace %v", store, namespace))
 	storeSpec := store.GetSpec()
 	if storeSpec == nil || storeSpec.Provider == nil || storeSpec.Provider.Vault == nil {
 		return nil, errors.New(errVaultStore)
@@ -248,6 +253,7 @@ func (c *Connector) newClient(ctx context.Context, store esv1beta1.GenericStore,
 }
 
 func (c *Connector) NewGeneratorClient(ctx context.Context, kube kclient.Client, corev1 typedcorev1.CoreV1Interface, vaultSpec *esv1beta1.VaultProvider, namespace string) (util.Client, error) {
+	logger.Info(fmt.Sprintf("NewGeneratorClient() for namespace %v", namespace))
 	vStore, cfg, err := c.prepareConfig(kube, corev1, vaultSpec, nil, namespace, "Generator")
 	if err != nil {
 		return nil, err
@@ -304,6 +310,7 @@ func (c *Connector) prepareConfig(kube kclient.Client, corev1 typedcorev1.CoreV1
 }
 
 func (c *Connector) initClient(ctx context.Context, vStore *client, client util.Client, cfg *vault.Config, vaultSpec *esv1beta1.VaultProvider) (esv1beta1.SecretsClient, error) {
+	vStore.log.Info("initClient()")
 	if vaultSpec.Namespace != nil {
 		client.SetNamespace(*vaultSpec.Namespace)
 	}
@@ -435,6 +442,7 @@ func (c *Connector) ValidateStore(store esv1beta1.GenericStore) error {
 }
 
 func (v *client) DeleteSecret(ctx context.Context, remoteRef esv1beta1.PushSecretRemoteRef) error {
+	v.log.Info("DeleteSecret()")
 	path := v.buildPath(remoteRef.GetRemoteKey())
 	metaPath, err := v.buildMetadataPath(remoteRef.GetRemoteKey())
 	if err != nil {
@@ -483,6 +491,7 @@ func (v *client) DeleteSecret(ctx context.Context, remoteRef esv1beta1.PushSecre
 }
 
 func (v *client) PushSecret(ctx context.Context, secret *corev1.Secret, data esv1beta1.PushSecretData) error {
+	v.log.Info("PushSecret()")
 	value := secret.Data[data.GetSecretKey()]
 	label := map[string]interface{}{
 		"custom_metadata": map[string]string{
@@ -644,6 +653,7 @@ func (v *client) findSecretsFromName(ctx context.Context, candidates []string, r
 }
 
 func (v *client) listSecrets(ctx context.Context, path string) ([]string, error) {
+	v.log.Info(fmt.Sprintf("listSecrets(%v)", path))
 	secrets := make([]string, 0)
 	url, err := v.buildMetadataPath(path)
 	if err != nil {
@@ -1119,60 +1129,62 @@ setAuth gets a new token using the configured mechanism.
 If there's already a valid token, does nothing.
 */
 func (v *client) setAuth(ctx context.Context, cfg *vault.Config) error {
+	v.log.Info("setAuth()")
 	tokenExists := false
 	var err error
 	if v.client.Token() != "" {
 		tokenExists, err = checkToken(ctx, v.token)
+		v.log.Info(fmt.Sprintf("checkToken() ret: %v, %v", tokenExists, err))
 	}
 	if tokenExists {
-		v.log.V(1).Info("Re-using existing token")
+		v.log.Info("Re-using existing token")
 		return err
 	}
 
 	tokenExists, err = setSecretKeyToken(ctx, v)
 	if tokenExists {
-		v.log.V(1).Info("Set token from secret")
+		v.log.Info("Set token from secret")
 		return err
 	}
 
 	tokenExists, err = setAppRoleToken(ctx, v)
 	if tokenExists {
-		v.log.V(1).Info("Retrieved new token using AppRole auth")
+		v.log.Info("Retrieved new token using AppRole auth")
 		return err
 	}
 
 	tokenExists, err = setKubernetesAuthToken(ctx, v)
 	if tokenExists {
-		v.log.V(1).Info("Retrieved new token using Kubernetes auth")
+		v.log.Info("Retrieved new token using Kubernetes auth")
 		return err
 	}
 
 	tokenExists, err = setLdapAuthToken(ctx, v)
 	if tokenExists {
-		v.log.V(1).Info("Retrieved new token using LDAP auth")
+		v.log.Info("Retrieved new token using LDAP auth")
 		return err
 	}
 
 	tokenExists, err = setUserPassAuthToken(ctx, v)
 	if tokenExists {
-		v.log.V(1).Info("Retrieved new token using userPass auth")
+		v.log.Info("Retrieved new token using userPass auth")
 		return err
 	}
 	tokenExists, err = setJwtAuthToken(ctx, v)
 	if tokenExists {
-		v.log.V(1).Info("Retrieved new token using JWT auth")
+		v.log.Info("Retrieved new token using JWT auth")
 		return err
 	}
 
 	tokenExists, err = setCertAuthToken(ctx, v, cfg)
 	if tokenExists {
-		v.log.V(1).Info("Retrieved new token using certificate auth")
+		v.log.Info("Retrieved new token using certificate auth")
 		return err
 	}
 
 	tokenExists, err = setIamAuthToken(ctx, v, vaultiamauth.DefaultJWTProvider, vaultiamauth.DefaultSTSProvider)
 	if tokenExists {
-		v.log.V(1).Info("Retrieved new token using IAM auth")
+		v.log.Info("Retrieved new token using IAM auth")
 		return err
 	}
 
@@ -1362,6 +1374,7 @@ func (v *client) serviceAccountToken(ctx context.Context, serviceAccountRef esme
 
 // checkToken does a lookup and checks if the provided token exists.
 func checkToken(ctx context.Context, token util.Token) (bool, error) {
+	logger.Info("checkToken()")
 	// https://www.vaultproject.io/api-docs/auth/token#lookup-a-token-self
 	resp, err := token.LookupSelfWithContext(ctx)
 	metrics.ObserveAPICall(constants.ProviderHCVault, constants.CallHCVaultLookupSelf, err)
@@ -1385,6 +1398,7 @@ func checkToken(ctx context.Context, token util.Token) (bool, error) {
 	if !ok {
 		return false, fmt.Errorf("no TTL found in response")
 	}
+	logger.Info(fmt.Sprintf("Token TTL: %v", token))
 	ttl_int := ttl.(int)
 	if ttl_int < 60 {
 		return false, fmt.Errorf("token expiring in %vs; treating as expired", ttl)
@@ -1467,7 +1481,7 @@ func getJwtString(ctx context.Context, v *client, kubernetesAuth *esv1beta1.Vaul
 			return jwt, err
 		}
 		if err != nil {
-			v.log.V(1).Info("unable to fetch jwt from service account secret, trying service account token next")
+			v.log.Info("unable to fetch jwt from service account secret, trying service account token next")
 		}
 		// Kubernetes >=v1.24: fetch token via TokenRequest API
 		// note: this is a massive change from vault perspective: the `iss` claim will very likely change.
@@ -1639,7 +1653,7 @@ func (v *client) requestTokenWithIamAuth(ctx context.Context, iamAuth *esv1beta1
 			return err
 		}
 	} else if secretRefAuth != nil { // if jwtAuth is not defined, check if secretRef is defined. Second preference.
-		logger.V(1).Info("using credentials from secretRef")
+		logger.Info("using credentials from secretRef")
 		creds, err = vaultiamauth.CredsFromSecretRef(ctx, *iamAuth, ick, k, n)
 		if err != nil {
 			return err

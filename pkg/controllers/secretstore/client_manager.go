@@ -82,7 +82,7 @@ func (m *Manager) GetFromStore(ctx context.Context, store esv1beta1.GenericStore
 	if secretClient != nil {
 		return secretClient, nil
 	}
-	m.log.V(1).Info("creating new client",
+	m.log.Info("creating new client",
 		"provider", fmt.Sprintf("%T", storeProvider),
 		"store", fmt.Sprintf("%s/%s", store.GetNamespace(), store.GetName()))
 	// secret client is created only if we are going to refresh
@@ -147,12 +147,12 @@ func (m *Manager) getStoredClient(ctx context.Context, storeProvider esv1beta1.P
 		val.store.GetTypeMeta().Kind == store.GetTypeMeta().Kind &&
 		val.store.GetName() == store.GetName() &&
 		val.store.GetNamespace() == store.GetNamespace() {
-		m.log.V(1).Info("reusing stored client",
+		m.log.Info("reusing stored client",
 			"provider", fmt.Sprintf("%T", storeProvider),
 			"store", storeName)
 		return val.client
 	}
-	m.log.V(1).Info("cleaning up client",
+	m.log.Info("cleaning up client",
 		"provider", fmt.Sprintf("%T", storeProvider),
 		"store", storeName)
 	// if we have a client but it points to a different store
@@ -193,6 +193,7 @@ func (m *Manager) getStore(ctx context.Context, storeRef *esv1beta1.SecretStoreR
 
 // Close cleans up all clients.
 func (m *Manager) Close(ctx context.Context) error {
+	m.log.Info("Manager.Close() - deleting all clients")
 	var errs []string
 	for key, val := range m.clientMap {
 		err := val.client.Close(ctx)
